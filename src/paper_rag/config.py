@@ -18,9 +18,13 @@ def _load_dotenv(path=".env"):
         return
     for line in p.read_text().splitlines():
         line = line.strip()
+        if line.startswith("export "):
+            line = line[len("export "):].strip()
         if line and not line.startswith("#") and "=" in line:
             k, v = line.split("=", 1)
-            os.environ.setdefault(k.strip(), v.strip().strip('"').strip("'"))
+            v = v.split(" #", 1)[0].strip().strip('"').strip("'")
+            if v:
+                os.environ.setdefault(k.strip(), v)
 
 
 _DEFAULT_MODELS = {

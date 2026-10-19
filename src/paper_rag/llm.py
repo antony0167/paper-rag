@@ -118,7 +118,8 @@ class OpenAICompatibleLLM:
 class AnthropicLLM:
     def __init__(self, model: str, api_key: str, base_url: str = "https://api.anthropic.com"):
         if not api_key:
-            raise LLMError("ANTHROPIC_API_KEY is not set")
+            raise LLMError("ANTHROPIC_API_KEY is not set. Put a line `ANTHROPIC_API_KEY=sk-ant-...` "
+                           "in .env (no # in front), in the folder you run paper-rag from.")
         self.url = base_url.rstrip("/") + "/v1/messages"
         self.model = model
         self.headers = {"x-api-key": api_key, "anthropic-version": "2023-06-01",

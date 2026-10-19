@@ -75,3 +75,15 @@ def test_parse_atom():
     assert p.authors == ["Patrick Lewis", "Ethan Perez"]
     assert p.published == "2020-05-22"
     assert p.pdf_url.endswith("2005.11401v4")
+
+
+def test_dotenv_parsing(tmp_path, monkeypatch):
+    from paper_rag.config import _load_dotenv
+    for k in ("A_KEY", "B_KEY", "C_KEY", "D_KEY"):
+        monkeypatch.delenv(k, raising=False)
+    env = tmp_path / ".env"
+    env.write_text('export A_KEY=sk-1\nB_KEY = "sk-2"   # comment\n# C_KEY=no\nD_KEY=\n')
+    _load_dotenv(env)
+    import os
+    assert os.environ["A_KEY"] == "sk-1" and os.environ["B_KEY"] == "sk-2"
+    assert "C_KEY" not in os.environ and "D_KEY" not in os.environ

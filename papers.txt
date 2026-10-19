@@ -1,0 +1,31 @@
+# arXiv ids indexed by `paper-rag ingest`. Retrieval, RAG and the models around them.
+2005.11401  # Retrieval-Augmented Generation for Knowledge-Intensive NLP Tasks
+2002.08909  # REALM
+2004.04906  # Dense Passage Retrieval
+2007.01282  # Fusion-in-Decoder
+2112.04426  # RETRO
+2208.03299  # Atlas
+2302.00083  # In-Context Retrieval-Augmented Language Models
+2310.11511  # Self-RAG
+2401.15884  # Corrective RAG
+2312.10997  # RAG survey
+2307.03172  # Lost in the Middle
+2212.10496  # HyDE
+2305.14283  # Query Rewriting for RAG
+2404.16130  # GraphRAG
+2309.15217  # RAGAS
+2306.05685  # LLM-as-a-judge (MT-Bench)
+2004.12832  # ColBERT
+2104.08663  # BEIR
+2112.09118  # Contriever
+2212.03533  # E5
+2309.07597  # C-Pack / BGE
+1908.10084  # Sentence-BERT
+1706.03762  # Attention Is All You Need
+1810.04805  # BERT
+2005.14165  # GPT-3
+2203.02155  # InstructGPT
+2106.09685  # LoRA
+2201.11903  # Chain-of-Thought
+2210.03629  # ReAct
+2302.04761  # Toolformer

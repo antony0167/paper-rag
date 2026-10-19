@@ -1,0 +1,19 @@
+name: tests
+
+on: [push, pull_request]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      # the tests use stand-in models, so the heavy ML dependencies aren't needed
+      - name: Install
+        run: |
+          pip install numpy requests pypdf rank-bm25 fastapi uvicorn matplotlib pytest httpx
+          pip install -e . --no-deps
+      - name: Test
+        run: pytest -q

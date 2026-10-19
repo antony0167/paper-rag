@@ -1,0 +1,21 @@
+# docker compose up  ->  API on http://localhost:8000 using a local Ollama model.
+# Index first:  docker compose run --rm api paper-rag ingest
+services:
+  api:
+    build: .
+    ports: ["8000:8000"]
+    environment:
+      LLM_PROVIDER: ollama
+      LLM_BASE_URL: http://ollama:11434/v1
+      LLM_MODEL: qwen2.5:7b
+    volumes:
+      - ./data:/app/data
+      - ./papers.txt:/app/papers.txt
+      - hf-cache:/root/.cache
+    depends_on: [ollama]
+  ollama:
+    image: ollama/ollama
+    volumes: [ollama:/root/.ollama]
+volumes:
+  hf-cache:
+  ollama:

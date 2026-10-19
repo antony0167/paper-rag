@@ -1,0 +1,34 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "paper-rag"
+version = "0.1.0"
+description = "Question answering over arXiv papers: hybrid retrieval, reranking, cited answers and an evaluation harness."
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+authors = [{ name = "Antoni Dluzewski" }]
+dependencies = [
+    "numpy>=1.24",
+    "requests>=2.31",
+    "pypdf>=4.0",
+    "rank-bm25>=0.2.2",
+    "sentence-transformers>=2.7",
+    "fastapi>=0.110",
+    "uvicorn>=0.29",
+    "matplotlib>=3.7",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=7", "httpx>=0.27"]
+
+[project.scripts]
+paper-rag = "paper_rag.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

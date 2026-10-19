@@ -43,6 +43,7 @@ class Usage:
         self.cost_usd = 0.0
         self.calls = 0
         self.max_cost_usd = max_cost_usd
+        self.incomplete = {}  # stop_reason -> count of cut-off or refused replies
 
     def check(self):
         if self.max_cost_usd is not None and self.cost_usd >= self.max_cost_usd:
@@ -58,8 +59,11 @@ class Usage:
             self.cost_usd += (input_tokens * p_in + output_tokens * p_out) / 1e6
 
     def summary(self):
-        return {"calls": self.calls, "input_tokens": self.input_tokens,
-                "output_tokens": self.output_tokens, "cost_usd": round(self.cost_usd, 4)}
+        out = {"calls": self.calls, "input_tokens": self.input_tokens,
+               "output_tokens": self.output_tokens, "cost_usd": round(self.cost_usd, 4)}
+        if self.incomplete:
+            out["incomplete_replies"] = dict(self.incomplete)
+        return out
 
 
 def _price(model: str):
@@ -115,7 +119,19 @@ class OpenAICompatibleLLM:
         return data["choices"][0]["message"]["content"].strip()
 
 
+NO_ANSWER = "[no answer from the model]"
+
+
 class AnthropicLLM:
+    """Messages API client.
+
+    Newer Claude models think before answering by default, and the hidden
+    thinking tokens count against max_tokens. A tight limit can then end the
+    reply mid-sentence or before any text at all. So callers keep passing the
+    length they want for the *answer*, and this client adds headroom for the
+    thinking and asks for low effort, which keeps thinking (and cost) small.
+    """
+
     def __init__(self, model: str, api_key: str, base_url: str = "https://api.anthropic.com"):
         if not api_key:
             raise LLMError("ANTHROPIC_API_KEY is not set. Put a line `ANTHROPIC_API_KEY=sk-ant-...` "
@@ -124,26 +140,44 @@ class AnthropicLLM:
         self.model = model
         self.headers = {"x-api-key": api_key, "anthropic-version": "2023-06-01",
                         "content-type": "application/json"}
-        self.send_temperature = True
+        self.headroom = int(os.environ.get("RAG_THINKING_HEADROOM", 2000))
+        effort = os.environ.get("RAG_EFFORT", "low")
+        # optional parameters some models reject; each is dropped after the first 400 that names it
+        self.optional = {"temperature": None, "output_config": {"effort": effort} if effort else None}
 
     def complete(self, system: str, user: str, max_tokens: int = 600, temperature: float = 0.0) -> str:
         USAGE.check()
-        payload = {"model": self.model, "system": system, "max_tokens": max_tokens,
+        payload = {"model": self.model, "system": system, "max_tokens": max_tokens + self.headroom,
                    "messages": [{"role": "user", "content": user}]}
-        if self.send_temperature:
-            payload["temperature"] = temperature
-        try:
-            data = _post(self.url, self.headers, payload)
-        except LLMError as e:
-            # newer models reject the sampling parameter; drop it and retry once
-            if "temperature" not in str(e) or "temperature" not in payload:
-                raise
-            self.send_temperature = False
-            payload.pop("temperature")
-            data = _post(self.url, self.headers, payload)
+        for key, value in self.optional.items():
+            if key == "temperature":
+                payload[key] = temperature
+            elif value is not None:
+                payload[key] = value
+        while True:
+            try:
+                data = _post(self.url, self.headers, payload)
+                break
+            except LLMError as e:
+                msg = str(e)
+                rejected = [k for k in self.optional if k in payload and
+                            (k in msg or (k == "output_config" and "effort" in msg))]
+                if not rejected:
+                    raise
+                for k in rejected:
+                    payload.pop(k)
+                    self.optional.pop(k)
         u = data.get("usage") or {}
         USAGE.add(self.model, u.get("input_tokens", 0), u.get("output_tokens", 0))
-        return "".join(b.get("text", "") for b in data["content"]).strip()
+        stop = data.get("stop_reason")
+        # thinking blocks come first, so pick text blocks by type, not position
+        text = "".join(b.get("text", "") for b in data.get("content", [])
+                       if b.get("type") == "text").strip()
+        if stop in ("max_tokens", "refusal") or not text:
+            USAGE.incomplete[stop or "empty"] = USAGE.incomplete.get(stop or "empty", 0) + 1
+        if not text:
+            return f"{NO_ANSWER} (stop_reason: {stop})"
+        return text
 
 
 class FakeLLM:

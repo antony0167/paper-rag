@@ -101,9 +101,9 @@ def estimate_eval_cost(s: Settings, n_questions: int, n_answers: int, chunk_word
 
     tok = chunk_words * 1.5                        # ~1.5 tokens per word in papers
     q_in = n_questions * 1.5 * (tok + 350)         # ~1.5 attempts per kept question
-    q_out = n_questions * 1.5 * 120
+    q_out = n_questions * 1.5 * 500                # reply + some thinking
     a_in = n_answers * (s.top_k * tok * 2 + 1500)  # answer + faithfulness both see the sources
-    a_out = n_answers * 900
+    a_out = n_answers * 3000                       # 5 calls per question, thinking included
     p_in, p_out = _price(s.llm_model)
     return ((q_in + a_in) * p_in + (q_out + a_out) * p_out) / 1e6
 

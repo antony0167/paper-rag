@@ -23,6 +23,7 @@ from pathlib import Path
 from typing import Dict, List, Optional
 
 from .chunking import Chunk
+from .llm import NO_ANSWER
 from .pipeline import RAG
 
 QGEN_SYSTEM = "You write evaluation questions for a search system over research papers. Reply with JSON only."
@@ -206,8 +207,8 @@ def answer_metrics(rag: RAG, items: List[dict], judge, mode="hybrid", rerank=Tru
             sources="\n\n".join(f"[{j + 1}] {h.chunk.text}" for j, h in enumerate(ans.sources)),
             answer=ans.text), max_tokens=400), "verdict")
         verdict = verdict.lower() if isinstance(verdict, str) else None
-        if verdict not in ("supported", "partial", "unsupported"):
-            verdict = None
+        if verdict not in ("supported", "partial", "unsupported") or ans.text.startswith(NO_ANSWER):
+            verdict = None  # an empty answer is trivially "supported"; don't count it
         gold_n = [j + 1 for j, h in enumerate(ans.sources) if h.chunk.chunk_id == it["gold_chunk"]]
         rows.append({
             "id": it["id"], "question": it["question"], "reference": it["reference"],

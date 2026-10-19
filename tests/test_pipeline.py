@@ -161,3 +161,19 @@ def test_local_models_are_free(monkeypatch):
     for _ in range(3):
         client.complete("s", "u")
     assert usage.cost_usd == 0.0
+
+
+def test_anthropic_retries_without_temperature(monkeypatch):
+    bodies = []
+
+    def post(url, headers, json, timeout):
+        bodies.append(dict(json))
+        if "temperature" in json:
+            return _Resp({"type": "error", "error": {"message": "`temperature` is deprecated for this model."}}, 400)
+        return _Resp({"content": [{"type": "text", "text": "ok"}], "usage": {"input_tokens": 1, "output_tokens": 1}})
+
+    monkeypatch.setattr(llm_mod.requests, "post", post)
+    client = AnthropicLLM("claude-haiku-5-5", "key")
+    assert client.complete("s", "u") == "ok"
+    assert client.complete("s", "u") == "ok"      # remembers: no failing request the second time
+    assert ["temperature" in b for b in bodies] == [True, False, False]

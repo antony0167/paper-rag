@@ -124,13 +124,23 @@ class AnthropicLLM:
         self.model = model
         self.headers = {"x-api-key": api_key, "anthropic-version": "2023-06-01",
                         "content-type": "application/json"}
+        self.send_temperature = True
 
     def complete(self, system: str, user: str, max_tokens: int = 600, temperature: float = 0.0) -> str:
         USAGE.check()
-        data = _post(self.url, self.headers, {
-            "model": self.model, "system": system, "max_tokens": max_tokens,
-            "temperature": temperature, "messages": [{"role": "user", "content": user}],
-        })
+        payload = {"model": self.model, "system": system, "max_tokens": max_tokens,
+                   "messages": [{"role": "user", "content": user}]}
+        if self.send_temperature:
+            payload["temperature"] = temperature
+        try:
+            data = _post(self.url, self.headers, payload)
+        except LLMError as e:
+            # newer models reject the sampling parameter; drop it and retry once
+            if "temperature" not in str(e) or "temperature" not in payload:
+                raise
+            self.send_temperature = False
+            payload.pop("temperature")
+            data = _post(self.url, self.headers, payload)
         u = data.get("usage") or {}
         USAGE.add(self.model, u.get("input_tokens", 0), u.get("output_tokens", 0))
         return "".join(b.get("text", "") for b in data["content"]).strip()

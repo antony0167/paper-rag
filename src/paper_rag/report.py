@@ -20,7 +20,9 @@ def write_report(out: Path, retrieval: dict, answers: dict = None, meta: dict = 
                   f"- answers citing the gold passage: {a['cites_gold_rate']:.0%}",
                   f"- abstained (\"sources don't cover this\"): {a['abstention_rate']:.0%}",
                   f"- answers with an invalid citation number: {a['invalid_citation_rate']:.0%}",
-                  f"- questions: {a['n']}"]
+                  f"- questions: {a['n']}"
+                  + (f" ({a['judge_failures']} with an unreadable judge reply, left out of the averages)"
+                     if a.get("judge_failures") else "")]
     if meta:
         lines += ["", "## Setup", ""] + [f"- {k}: {v}" for k, v in meta.items()]
     (out / "summary.md").write_text("\n".join(lines) + "\n")

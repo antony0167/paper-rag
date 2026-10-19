@@ -50,7 +50,7 @@ Candidate answer: {candidate}
 
 How well does the candidate answer the question, compared with the reference?
 5 = fully correct, 4 = correct with minor gaps, 3 = partly correct, 2 = mostly wrong or vague, 1 = wrong or no answer.
-Reply {{"score": <1-5>, "reason": "<one sentence>"}}"""
+Reply {{"score": <1-5>, "reason": "<at most 15 words>"}}"""
 
 FAITHFUL_USER = """Sources:
 {sources}
@@ -58,7 +58,7 @@ FAITHFUL_USER = """Sources:
 Answer: {answer}
 
 Is every factual claim in the answer supported by the sources above?
-Reply {{"verdict": "supported" | "partial" | "unsupported", "reason": "<one sentence>"}}
+Reply {{"verdict": "supported" | "partial" | "unsupported", "reason": "<at most 15 words>"}}
 (An answer that only says the sources don't cover the question counts as "supported".)"""
 
 
@@ -70,6 +70,19 @@ def parse_json(text: str) -> Optional[dict]:
         return json.loads(m.group(0))
     except json.JSONDecodeError:
         return None
+
+
+def judge_field(text: str, key: str):
+    """Read one field from the judge's reply, even if the JSON was cut off.
+
+    The judge sometimes writes a long "reason" and hits max_tokens before the
+    closing brace; the field we care about comes first, so it is still there.
+    """
+    out = parse_json(text)
+    if out and key in out:
+        return out[key]
+    m = re.search(rf'"{key}"\s*:\s*"?([A-Za-z0-9]+)', text)
+    return m.group(1) if m else None
 
 
 def ngrams(words, n):
@@ -181,22 +194,26 @@ def answer_metrics(rag: RAG, items: List[dict], judge, mode="hybrid", rerank=Tru
         closed = rag.llm.complete(CLOSED_BOOK_SYSTEM, it["question"])
 
         def grade(candidate):
-            out = parse_json(judge.complete(JUDGE_SYSTEM, CORRECTNESS_USER.format(
-                question=it["question"], reference=it["reference"], candidate=candidate), max_tokens=150))
+            raw = judge.complete(JUDGE_SYSTEM, CORRECTNESS_USER.format(
+                question=it["question"], reference=it["reference"], candidate=candidate), max_tokens=400)
             try:
-                return int(out["score"])
-            except (TypeError, KeyError, ValueError):
+                score = int(judge_field(raw, "score"))
+            except (TypeError, ValueError):
                 return None
+            return score if 1 <= score <= 5 else None
 
-        faith = parse_json(judge.complete(JUDGE_SYSTEM, FAITHFUL_USER.format(
+        verdict = judge_field(judge.complete(JUDGE_SYSTEM, FAITHFUL_USER.format(
             sources="\n\n".join(f"[{j + 1}] {h.chunk.text}" for j, h in enumerate(ans.sources)),
-            answer=ans.text), max_tokens=150)) or {}
+            answer=ans.text), max_tokens=400), "verdict")
+        verdict = verdict.lower() if isinstance(verdict, str) else None
+        if verdict not in ("supported", "partial", "unsupported"):
+            verdict = None
         gold_n = [j + 1 for j, h in enumerate(ans.sources) if h.chunk.chunk_id == it["gold_chunk"]]
         rows.append({
             "id": it["id"], "question": it["question"], "reference": it["reference"],
             "rag_answer": ans.text, "closed_book_answer": closed,
             "rag_score": grade(ans.text), "closed_book_score": grade(closed),
-            "faithfulness": faith.get("verdict"),
+            "faithfulness": verdict,
             "abstained": "don't cover" in ans.text.lower(),
             "cited": ans.cited, "invalid_citations": ans.invalid_citations,
             "cites_gold": bool(set(ans.cited) & set(gold_n)),
@@ -209,13 +226,18 @@ def answer_metrics(rag: RAG, items: List[dict], judge, mode="hybrid", rerank=Tru
         return sum(xs) / len(xs) if xs else None
 
     n = len(rows)
+    judged = [r for r in rows if r["faithfulness"] is not None]
+    nj = max(1, len(judged))
     summary = {
         "n": n,
         "rag_correctness": mean(r["rag_score"] for r in rows),
         "closed_book_correctness": mean(r["closed_book_score"] for r in rows),
-        "faithful_supported": sum(r["faithfulness"] == "supported" for r in rows) / n,
-        "faithful_partial": sum(r["faithfulness"] == "partial" for r in rows) / n,
-        "faithful_unsupported": sum(r["faithfulness"] == "unsupported" for r in rows) / n,
+        # faithfulness shares are over answers the judge actually graded
+        "faithful_supported": sum(r["faithfulness"] == "supported" for r in judged) / nj,
+        "faithful_partial": sum(r["faithfulness"] == "partial" for r in judged) / nj,
+        "faithful_unsupported": sum(r["faithfulness"] == "unsupported" for r in judged) / nj,
+        "judge_failures": sum(r["rag_score"] is None or r["closed_book_score"] is None
+                              or r["faithfulness"] is None for r in rows),
         "abstention_rate": sum(r["abstained"] for r in rows) / n,
         "invalid_citation_rate": sum(bool(r["invalid_citations"]) for r in rows) / n,
         "cites_gold_rate": sum(r["cites_gold"] for r in rows) / n,

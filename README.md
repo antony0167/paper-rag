@@ -4,7 +4,13 @@ Ask questions about a set of research papers and get short answers that cite the
 
 The part I cared about most is **measuring** it. "The answers look good" doesn't tell you much, so the project ships its own evaluation: a generated test set where every question has a known source passage, retrieval metrics for each retriever, and LLM-judged correctness and faithfulness, compared against the same LLM answering without any sources.
 
-<!-- EXAMPLE: real output from the first run goes here -->
+**In short:** a search and ranking problem (find the one passage, among 1,246, that answers a question), solved with sparse and dense retrieval, compared against a keyword baseline with standard ranking metrics (Recall@k, MRR), and followed by an error analysis of why each method wins or loses.
+
+One item from the test set (`results/eval_set.jsonl`), to show what the system is asked to do:
+
+> **Question:** In the In-Context RALM setup, by how much did adding retrieved documents raise LLaMA-13B's zero-shot accuracy on Natural Questions, and what were the before and after scores?
+> **Reference answer:** Adding retrieved documents improved LLaMA-13B's zero-shot NQ accuracy by more than 18 points, from 12.0% to 31.0%.
+> **Gold passage:** chunk 31 of arXiv 2302.00083. A retriever scores a hit only if it ranks this exact chunk.
 
 ## Results
 
@@ -30,7 +36,9 @@ This is not the result I expected when I designed the pipeline, and I think it's
 **What I'd change next:** default to BM25 + dense with BM25 weighted higher in the fusion (or BM25 alone for this kind of corpus), drop the MiniLM reranker or replace it with one trained on scientific text, and build a set of real, hand-written questions. Generated questions favour keyword search, so these numbers probably overstate how much BM25 wins in real use.
 
 
-<!-- ANSWERS -->
+### Answers
+
+`paper-rag eval --answers 30` also grades the generated answers: the same LLM answers each question with retrieved sources (RAG) and without them (closed book), and a judge model scores correctness against the reference and checks that every claim is supported by the cited sources. This step calls a paid API, so its numbers are not part of the run reported above; the retrieval results do not depend on it.
 
 ## How it works
 
@@ -58,7 +66,7 @@ A few decisions worth explaining:
 
 ## How the evaluation works
 
-1. **Test set.** Sample about 150 chunks, round-robin across papers. For each one, the LLM writes a question the chunk answers plus a one-sentence reference answer. Questions that copy five or more consecutive words from the chunk are thrown away, because otherwise BM25 would win by string matching. The chunk is the gold passage.
+1. **Test set.** Sample about 150 chunks, round-robin across papers. For each one, the LLM writes a question the chunk answers plus a one-sentence reference answer. Questions that copy five or more consecutive words from the chunk are thrown away: that copying would be a form of data leakage, letting BM25 win by string matching. The chunk is the gold passage.
 2. **Retrieval.** For each retriever (BM25, dense, hybrid, hybrid + rerank): Recall@1/5/10 of the gold chunk, MRR@10, and the share of questions where the right *paper* is in the top 5.
 3. **Answers.** On a subset of questions, the same LLM answers twice: with retrieved sources (RAG) and without (closed book). A judge model scores each answer 1-5 against the reference and checks whether the RAG answer is supported by its sources.
 
